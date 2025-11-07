@@ -258,7 +258,6 @@ def successfully_transferred_for_booking_stats_query(date_filter: str, org_id: s
     extracted AS (
         SELECT
             JSONExtractString(no.flat_data, 'result.transfer.transfer_attempt') AS transfer_attempt,
-            JSONExtractString(no.flat_data, 'result.transfer.transfer_success') AS transfer_success,
             JSONExtractString(no.flat_data, 'result.pricing.agreed_upon_rate') AS agreed_upon_rate,
             JSONExtractString(no.flat_data, 'result.pricing.pricing_notes') AS pricing_notes
         FROM public_node_outputs AS no
@@ -268,7 +267,6 @@ def successfully_transferred_for_booking_stats_query(date_filter: str, org_id: s
         WHERE n.org_id = '{org_id}'
         AND no.node_persistent_id = '{PEPSI_BROKER_NODE_ID}'
         AND JSONHas(no.flat_data, 'result.transfer.transfer_attempt') = 1
-        AND JSONHas(no.flat_data, 'result.transfer.transfer_success') = 1
         AND JSONHas(no.flat_data, 'result.pricing.agreed_upon_rate') = 1
         AND JSONHas(no.flat_data, 'result.pricing.pricing_notes') = 1
         AND s.user_number != '+19259898099'
@@ -276,7 +274,6 @@ def successfully_transferred_for_booking_stats_query(date_filter: str, org_id: s
     successfully_transferred_for_booking AS (
         SELECT
             transfer_attempt,
-            transfer_success,
             agreed_upon_rate,
             pricing_notes,
             count() AS cnt
@@ -285,10 +282,6 @@ def successfully_transferred_for_booking_stats_query(date_filter: str, org_id: s
         AND transfer_attempt != ''
         AND transfer_attempt != 'null'
         AND transfer_attempt = 'YES'
-        AND isNotNull(transfer_success)
-        AND transfer_success != ''
-        AND transfer_success != 'null'
-        AND transfer_success = 'YES'
         AND isNotNull(agreed_upon_rate)
         AND agreed_upon_rate != ''
         AND agreed_upon_rate != 'null'
@@ -296,7 +289,7 @@ def successfully_transferred_for_booking_stats_query(date_filter: str, org_id: s
         AND pricing_notes != ''
         AND pricing_notes != 'null'
         AND (pricing_notes = 'AGREEMENT_REACHED_WITH_NEGOTIATION' OR pricing_notes = 'AGREEMENT_REACHED_WITHOUT_NEGOTIATION')
-        GROUP BY transfer_attempt, transfer_success, agreed_upon_rate, pricing_notes
+        GROUP BY transfer_attempt, agreed_upon_rate, pricing_notes
     ),
     successfully_transferred_for_booking_count AS (
         SELECT SUM(cnt) AS successfully_transferred_for_booking_count
