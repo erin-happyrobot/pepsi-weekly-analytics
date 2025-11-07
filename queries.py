@@ -435,3 +435,45 @@ def pricing_stats_query(date_filter: str, org_id: str, PEPSI_BROKER_NODE_ID: str
         CROSS JOIN total_calls tc
         ORDER BY ps.count DESC
     """
+
+
+def carrier_end_state_query(date_filter: str, org_id: str, PEPSI_BROKER_NODE_ID: str) -> str:
+    # pricing stats
+    return f"""
+        WITH recent_runs AS (
+            SELECT id AS run_id
+            FROM public_runs
+            WHERE {date_filter}
+        ),
+        sessions AS (
+        select run_id, user_number from public_sessions
+        WHERE {date_filter}
+        AND org_id = '{org_id}'
+        ),
+        carrier_end_state_stats AS (
+            SELECT
+                JSONExtractString(no.flat_data, 'result.carrier.carrier_end_state') AS carrier_end_state,
+                COUNT(*) AS count
+            FROM public_node_outputs no
+            INNER JOIN recent_runs rr ON no.run_id = rr.run_id
+            INNER JOIN public_nodes n ON no.node_id = n.id
+            INNER JOIN sessions s ON no.run_id = s.run_id
+            WHERE n.org_id = '{org_id}'
+            AND no.node_persistent_id = '{PEPSI_BROKER_NODE_ID}'
+            AND JSONHas(no.flat_data, 'result.carrier.carrier_end_state') = 1
+            AND JSONExtractString(no.flat_data, 'result.carrier.carrier_end_state') != ''
+            AND JSONExtractString(no.flat_data, 'result.carrier.carrier_end_state') != 'null'
+            AND s.user_number != '+19259898099'
+            GROUP BY carrier_end_state
+        ),
+        total_calls AS (
+            SELECT SUM(count) AS total FROM carrier_end_state_stats
+        )
+        SELECT
+            ces.carrier_end_state,
+            ces.count,
+            ROUND((ces.count * 100.0) / tc.total, 2) AS percentage
+        FROM carrier_end_state_stats ces
+        CROSS JOIN total_calls tc
+        ORDER BY ces.count DESC
+    """

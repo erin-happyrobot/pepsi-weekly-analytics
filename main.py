@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from db import fetch_calls_ending_in_each_call_stage_stats, fetch_carrier_asked_transfer_over_total_transfer_attempts_stats, fetch_carrier_asked_transfer_over_total_call_attempts_stats,fetch_load_not_found_stats, fetch_load_status_stats, fetch_successfully_transferred_for_booking_stats, fetch_call_classication_stats, fetch_carrier_qualification_stats, fetch_pricing_stats
+from db import fetch_calls_ending_in_each_call_stage_stats, fetch_carrier_asked_transfer_over_total_transfer_attempts_stats, fetch_carrier_asked_transfer_over_total_call_attempts_stats,fetch_load_not_found_stats, fetch_load_status_stats, fetch_successfully_transferred_for_booking_stats, fetch_call_classication_stats, fetch_carrier_qualification_stats, fetch_pricing_stats, fetch_carrier_end_state_stats
 from typing import Optional
 import os
 from pathlib import Path
@@ -188,6 +188,7 @@ async def get_carrier_qualification_stats(start_date: Optional[str] = None, end_
         logger.exception("Error in get_carrier_qualification_stats endpoint")
         raise HTTPException(status_code=500, detail=f"Error fetching carrier qualification stats: {str(e)}")
 
+
 @app.get("/pricing-stats")
 async def get_pricing_stats(start_date: Optional[str] = None, end_date: Optional[str] = None):
     """Get pricing stats"""
@@ -199,6 +200,18 @@ async def get_pricing_stats(start_date: Optional[str] = None, end_date: Optional
         logger = logging.getLogger(__name__)
         logger.exception("Error in get_pricing_stats endpoint")
         raise HTTPException(status_code=500, detail=f"Error fetching pricing stats: {str(e)}")
+
+@app.get("/carrier-end-state-stats")
+async def get_carrier_end_state_stats(start_date: Optional[str] = None, end_date: Optional[str] = None):
+    """Get carrier end state stats"""
+    try:
+        results = fetch_carrier_end_state_stats(start_date, end_date)
+        return [{"carrier_end_state": r.carrier_end_state, "count": r.count, "percentage": r.percentage} for r in results]
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.exception("Error in get_carrier_end_state_stats endpoint")
+        raise HTTPException(status_code=500, detail=f"Error fetching carrier end state stats: {str(e)}")
 
 @app.get("/all-stats")
 async def get_all_stats(start_date: Optional[str] = None, end_date: Optional[str] = None):
@@ -329,6 +342,18 @@ async def get_all_stats(start_date: Optional[str] = None, end_date: Optional[str
         logger.exception("Error fetching pricing stats")
         errors["pricing"] = str(e)
         stats["pricing"] = None
+
+     # Carrier end state stats
+    try:
+        carrier_end_state_results = fetch_carrier_end_state_stats(start_date, end_date)
+        if carrier_end_state_results:
+            stats["carrier_end_state"] = [{"carrier_end_state": r.carrier_end_state, "count": r.count, "percentage": r.percentage} for r in carrier_end_state_results]
+        else:
+            stats["carrier_end_state"] = None
+    except Exception as e:
+        logger.exception("Error fetching carrier end state stats")
+        errors["carrier_end_state"] = str(e)
+        stats["carrier_end_state"] = None
     
     response = {
         "stats": stats,
@@ -337,6 +362,8 @@ async def get_all_stats(start_date: Optional[str] = None, end_date: Optional[str
             "end_date": end_date
         }
     }
+
+    
     
     if errors:
         response["errors"] = errors
