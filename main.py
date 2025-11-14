@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from db import fetch_calls_ending_in_each_call_stage_stats, fetch_carrier_asked_transfer_over_total_transfer_attempts_stats, fetch_carrier_asked_transfer_over_total_call_attempts_stats,fetch_load_not_found_stats, fetch_load_status_stats, fetch_successfully_transferred_for_booking_stats, fetch_call_classifcation_stats, fetch_carrier_qualification_stats, fetch_pricing_stats, fetch_carrier_end_state_stats, fetch_percent_non_convertible_calls
+from db import fetch_calls_ending_in_each_call_stage_stats, fetch_carrier_asked_transfer_over_total_transfer_attempts_stats, fetch_carrier_asked_transfer_over_total_call_attempts_stats,fetch_load_not_found_stats, fetch_load_status_stats, fetch_successfully_transferred_for_booking_stats, fetch_call_classifcation_stats, fetch_carrier_qualification_stats, fetch_pricing_stats, fetch_carrier_end_state_stats, fetch_percent_non_convertible_calls, fetch_number_of_unique_loads
 from typing import Optional
 import os
 from pathlib import Path
@@ -229,6 +229,23 @@ async def get_percent_non_convertible_calls_stats(start_date: Optional[str] = No
         logger.exception("Error in get_percent_non_convertible_calls_stats endpoint")
         raise HTTPException(status_code=500, detail=f"Error fetching percent non convertible calls stats: {str(e)}")
 
+@app.get("/number-of-unique-loads-stats")
+async def get_number_of_unique_loads_stats(start_date: Optional[str] = None, end_date: Optional[str] = None):
+    """Get number of unique loads stats"""
+    try:
+        result = fetch_number_of_unique_loads(start_date, end_date)
+        return {
+            "number_of_unique_loads": result.number_of_unique_loads,
+            "total_calls_count": result.total_calls_count,
+            "number_of_unique_loads_percentage": result.number_of_unique_loads_percentage
+
+        }
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.exception("Error in get_number_of_unique_loads_stats endpoint")
+        raise HTTPException(status_code=500, detail=f"Error fetching number of unique loads stats: {str(e)}")
+
 @app.get("/all-stats")
 async def get_all_stats(start_date: Optional[str] = None, end_date: Optional[str] = None):
     """Get all stats aggregated with labels"""
@@ -386,6 +403,22 @@ async def get_all_stats(start_date: Optional[str] = None, end_date: Optional[str
         logger.exception("Error fetching percent non convertible calls stats")
         errors["percent_non_convertible_calls"] = str(e)
         stats["percent_non_convertible_calls"] = None
+
+    # Number of unique loads stats
+    try:
+        number_of_unique_loads_result = fetch_number_of_unique_loads(start_date, end_date)
+        if number_of_unique_loads_result:
+            stats["number_of_unique_loads"] = {
+                "number_of_unique_loads": number_of_unique_loads_result.number_of_unique_loads,
+                "total_calls_count": number_of_unique_loads_result.total_calls_count,
+                "number_of_unique_loads_percentage": number_of_unique_loads_result.number_of_unique_loads_percentage
+            }
+        else:
+            stats["number_of_unique_loads"] = None
+    except Exception as e:
+        logger.exception("Error fetching number of unique loads stats")
+        errors["number_of_unique_loads"] = str(e)
+        stats["number_of_unique_loads"] = None
     
     response = {
         "stats": stats,
