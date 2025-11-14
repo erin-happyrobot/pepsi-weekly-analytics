@@ -167,7 +167,7 @@ def format_timestamp_for_display(ts: str, tz_name: str = "UTC") -> str:
 
 # TODO: put your real persistent node id here
 PEPSI_BROKER_NODE_ID = "01999d78-d321-7db5-ae1f-ebfddc2bff11"
-
+PEPSI_FBR_NODE_ID = "0199f2f5-ec8f-73e4-898b-09a2286e240e"
 
 # ---- Data models -------------------------------------------------------------
 
@@ -1034,7 +1034,7 @@ def fetch_number_of_unique_loads(start_date: Optional[str] = None, end_date: Opt
             logger.info("Fetching number of unique loads for date range: %s to %s", start_date, end_date)
         else:
             logger.info("Fetching number of unique loads for last 30 days (no date range provided)")
-        query = number_of_unique_loads_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
+        query = number_of_unique_loads_query(date_filter, org_id, PEPSI_FBR_NODE_ID)
         
         client = get_clickhouse_client()
         rows = _json_each_row( client, query, settings={ "max_execution_time": 60,
