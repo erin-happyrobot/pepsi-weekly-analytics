@@ -411,7 +411,7 @@ async def get_all_stats(start_date: Optional[str] = None, end_date: Optional[str
             stats["number_of_unique_loads"] = {
                 "number_of_unique_loads": number_of_unique_loads_result.number_of_unique_loads,
                 "total_calls": number_of_unique_loads_result.total_calls,
-                "number_of_unique_loads_percentage": number_of_unique_loads_result.number_of_unique_loads_percentage
+                "calls_per_unique_load": number_of_unique_loads_result.calls_per_unique_load
             }
         else:
             stats["number_of_unique_loads"] = None
@@ -419,6 +419,7 @@ async def get_all_stats(start_date: Optional[str] = None, end_date: Optional[str
         logger.exception("Error fetching number of unique loads stats")
         errors["number_of_unique_loads"] = str(e)
         stats["number_of_unique_loads"] = None
+
     
     response = {
         "stats": stats,

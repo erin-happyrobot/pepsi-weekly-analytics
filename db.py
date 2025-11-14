@@ -244,7 +244,7 @@ class PercentNonConvertibleCallsStats:
 class NumberOfUniqueLoadsStats:
     number_of_unique_loads: int
     total_calls: int
-    number_of_unique_loads_percentage: float
+    calls_per_unique_load: float
 
 @dataclass
 class PepsiRecord:
@@ -1050,7 +1050,7 @@ def fetch_number_of_unique_loads(start_date: Optional[str] = None, end_date: Opt
         return NumberOfUniqueLoadsStats(
             number_of_unique_loads=int(r.get("number_of_unique_loads", 0)),
             total_calls=int(r.get("total_calls", 0)),
-            number_of_unique_loads_percentage=float(r.get("number_of_unique_loads_percentage", 0.0)),
+            calls_per_unique_load=float(r.get("calls_per_unique_load", 0.0)),
         )
     except Exception as e:
         logger.exception("Error fetching number of unique loads: %s", e)

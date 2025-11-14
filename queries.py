@@ -619,6 +619,6 @@ def number_of_unique_loads_query(date_filter: str, org_id: str, PEPSI_BROKER_NOD
         total_calls AS (
             SELECT SUM(1) AS total_calls FROM sessions
         )
-        SELECT number_of_unique_loads, total_calls, ROUND((number_of_unique_loads * 100.0) / total_calls, 2) AS number_of_unique_loads_percentage
+        SELECT number_of_unique_loads, total_calls, ROUND(total_calls/number_of_unique_loads, 2) AS calls_per_unique_load
         FROM number_of_unique_loads_stats, total_calls
         """
