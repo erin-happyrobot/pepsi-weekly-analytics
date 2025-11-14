@@ -410,7 +410,7 @@ async def get_all_stats(start_date: Optional[str] = None, end_date: Optional[str
         if number_of_unique_loads_result:
             stats["number_of_unique_loads"] = {
                 "number_of_unique_loads": number_of_unique_loads_result.number_of_unique_loads,
-                "total_calls_count": number_of_unique_loads_result.total_calls_count,
+                "total_calls": number_of_unique_loads_result.total_calls,
                 "number_of_unique_loads_percentage": number_of_unique_loads_result.number_of_unique_loads_percentage
             }
         else:
