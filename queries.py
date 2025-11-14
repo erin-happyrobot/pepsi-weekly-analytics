@@ -629,3 +629,36 @@ def number_of_unique_loads_query(date_filter: str, org_id: str, PEPSI_FBR_NODE_I
             ifNull(round(total_calls / nullIf(number_of_unique_loads, 0), 2), 0) AS calls_per_unique_load
         FROM number_of_unique_loads_stats, total_calls
         """
+
+def list_of_unique_loads_query(date_filter: str, org_id: str, PEPSI_FBR_NODE_ID: str) -> str:
+    # list of unique loads
+    return f"""
+        WITH recent_runs AS (
+            SELECT id AS run_id
+            FROM public_runs
+            WHERE {date_filter}
+        ),
+        sessions AS (
+            SELECT DISTINCT s.run_id, s.user_number 
+            FROM public_sessions s
+            INNER JOIN recent_runs rr ON s.run_id = rr.run_id
+            WHERE s.org_id = '{org_id}'
+            AND isNotNull(s.user_number)
+            AND s.user_number != ''
+            AND s.user_number != '+19259898099'
+        ),
+        list_of_unique_loads_stats AS (
+            SELECT DISTINCT JSONExtractString(no.flat_data, 'load.custom_load_id') AS custom_load_id
+            FROM public_node_outputs no
+            INNER JOIN recent_runs rr ON no.run_id = rr.run_id
+            INNER JOIN public_nodes n ON no.node_id = n.id
+            INNER JOIN sessions s ON no.run_id = s.run_id
+            WHERE n.org_id = '{org_id}'
+            AND no.node_persistent_id = '{PEPSI_FBR_NODE_ID}'
+            AND JSONHas(no.flat_data, 'load.custom_load_id') = 1
+            AND JSONExtractString(no.flat_data, 'load.custom_load_id') != ''
+            AND JSONExtractString(no.flat_data, 'load.custom_load_id') != 'null'
+            AND s.user_number != '+19259898099'
+        )
+        SELECT custom_load_id FROM list_of_unique_loads_stats
+        """

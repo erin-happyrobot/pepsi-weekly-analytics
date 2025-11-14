@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from db import fetch_calls_ending_in_each_call_stage_stats, fetch_carrier_asked_transfer_over_total_transfer_attempts_stats, fetch_carrier_asked_transfer_over_total_call_attempts_stats,fetch_load_not_found_stats, fetch_load_status_stats, fetch_successfully_transferred_for_booking_stats, fetch_call_classifcation_stats, fetch_carrier_qualification_stats, fetch_pricing_stats, fetch_carrier_end_state_stats, fetch_percent_non_convertible_calls, fetch_number_of_unique_loads
+from db import fetch_calls_ending_in_each_call_stage_stats, fetch_carrier_asked_transfer_over_total_transfer_attempts_stats, fetch_carrier_asked_transfer_over_total_call_attempts_stats,fetch_load_not_found_stats, fetch_load_status_stats, fetch_successfully_transferred_for_booking_stats, fetch_call_classifcation_stats, fetch_carrier_qualification_stats, fetch_pricing_stats, fetch_carrier_end_state_stats, fetch_percent_non_convertible_calls, fetch_number_of_unique_loads, fetch_list_of_unique_loads
 from typing import Optional
 import os
 from pathlib import Path
@@ -245,6 +245,20 @@ async def get_number_of_unique_loads_stats(start_date: Optional[str] = None, end
         logger = logging.getLogger(__name__)
         logger.exception("Error in get_number_of_unique_loads_stats endpoint")
         raise HTTPException(status_code=500, detail=f"Error fetching number of unique loads stats: {str(e)}")
+
+@app.get("/list-of-unique-loads-stats")
+async def get_list_of_unique_loads_stats(start_date: Optional[str] = None, end_date: Optional[str] = None):
+    """Get list of unique loads stats"""
+    try:
+        result = fetch_list_of_unique_loads(start_date, end_date)
+        return {
+            "list_of_unique_loads": result.list_of_unique_loads
+        }
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.exception("Error in get_list_of_unique_loads_stats endpoint")
+        raise HTTPException(status_code=500, detail=f"Error fetching list of unique loads stats: {str(e)}")
 
 @app.get("/all-stats")
 async def get_all_stats(start_date: Optional[str] = None, end_date: Optional[str] = None):

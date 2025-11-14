@@ -15,7 +15,7 @@ import clickhouse_connect
 # from timezone_utils import get_time_filter, format_timestamp_for_display
 from datetime import datetime, timedelta, timezone
 
-from queries import carrier_asked_transfer_over_total_transfer_attempt_stats_query, carrier_asked_transfer_over_total_call_attempts_stats_query, calls_ending_in_each_call_stage_stats_query, load_not_found_stats_query, load_status_stats_query, successfully_transferred_for_booking_stats_query, call_classifcation_stats_query, carrier_qualification_stats_query, pricing_stats_query, carrier_end_state_query, percent_non_convertible_calls_query, number_of_unique_loads_query
+from queries import carrier_asked_transfer_over_total_transfer_attempt_stats_query, carrier_asked_transfer_over_total_call_attempts_stats_query, calls_ending_in_each_call_stage_stats_query, load_not_found_stats_query, load_status_stats_query, successfully_transferred_for_booking_stats_query, call_classifcation_stats_query, carrier_qualification_stats_query, pricing_stats_query, carrier_end_state_query, percent_non_convertible_calls_query, number_of_unique_loads_query, list_of_unique_loads_query
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -245,6 +245,10 @@ class NumberOfUniqueLoadsStats:
     number_of_unique_loads: int
     total_calls: int
     calls_per_unique_load: float
+
+@dataclass
+class ListOfUniqueLoadsStats:
+    list_of_unique_loads: List[str]
 
 @dataclass
 class PepsiRecord:
@@ -1054,4 +1058,38 @@ def fetch_number_of_unique_loads(start_date: Optional[str] = None, end_date: Opt
         )
     except Exception as e:
         logger.exception("Error fetching number of unique loads: %s", e)
+        return None
+
+def fetch_list_of_unique_loads(start_date: Optional[str] = None, end_date: Optional[str] = None) -> Optional[List[str]]:
+    org_id = get_org_id()
+    if not org_id:
+        logger.error("❌ ORG_ID not found in environment variables. Please check your .env and restart the app.")
+        return None
+    
+    try:
+        date_filter = (
+            f"timestamp >= parseDateTime64BestEffort('{start_date}') AND timestamp < parseDateTime64BestEffort('{end_date}')"
+            if start_date and end_date
+            else "timestamp >= now() - INTERVAL 30 DAY" 
+        )
+        
+        if start_date and end_date:
+            logger.info("Fetching list of unique loads for date range: %s to %s", start_date, end_date)
+        else:
+            logger.info("Fetching list of unique loads for last 30 days (no date range provided)")
+        query = list_of_unique_loads_query(date_filter, org_id, PEPSI_FBR_NODE_ID)
+        
+        client = get_clickhouse_client()
+        rows = _json_each_row( client, query, settings={ "max_execution_time": 60,
+            "max_memory_usage": 2_000_000_000,
+            "max_threads": 4,
+        },
+    )
+        logger.info("List of unique loads query result: %d rows", len(rows))
+        if not rows:
+            logger.info("No list of unique loads found")
+            return None
+        return [str(r.get("custom_load_id")) for r in rows]
+    except Exception as e:
+        logger.exception("Error fetching list of unique loads: %s", e)
         return None
