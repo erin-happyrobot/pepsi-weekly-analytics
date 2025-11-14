@@ -15,7 +15,7 @@ import clickhouse_connect
 # from timezone_utils import get_time_filter, format_timestamp_for_display
 from datetime import datetime, timedelta, timezone
 
-from queries import carrier_asked_transfer_over_total_transfer_attempt_stats_query, carrier_asked_transfer_over_total_call_attempts_stats_query, calls_ending_in_each_call_stage_stats_query, load_not_found_stats_query, load_status_stats_query, successfully_transferred_for_booking_stats_query, call_classifcation_stats_query, carrier_qualification_stats_query, pricing_stats_query, carrier_end_state_query
+from queries import carrier_asked_transfer_over_total_transfer_attempt_stats_query, carrier_asked_transfer_over_total_call_attempts_stats_query, calls_ending_in_each_call_stage_stats_query, load_not_found_stats_query, load_status_stats_query, successfully_transferred_for_booking_stats_query, call_classifcation_stats_query, carrier_qualification_stats_query, pricing_stats_query, carrier_end_state_query, percent_non_convertible_calls_query
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -234,6 +234,11 @@ class CarrierEndStateStats:
     count: int
     percentage: float
 
+@dataclass
+class PercentNonConvertibleCallsStats:
+    non_convertible_calls_count: int
+    total_calls_count: int
+    non_convertible_calls_percentage: float
 
 @dataclass
 class PepsiRecord:
@@ -966,3 +971,42 @@ def fetch_carrier_end_state_stats(start_date: Optional[str] = None, end_date: Op
         logger.exception("Error fetching carrier end state stats: %s", e)
         return []
 
+
+def fetch_percent_non_convertible_calls(start_date: Optional[str] = None, end_date: Optional[str] = None) -> Optional[PercentNonConvertibleCallsStats]:
+    org_id = get_org_id()
+    if not org_id:
+        logger.error("❌ ORG_ID not found in environment variables. Please check your .env and restart the app.")
+        return None
+    
+    try:
+        date_filter = (
+            f"timestamp >= parseDateTime64BestEffort('{start_date}') AND timestamp < parseDateTime64BestEffort('{end_date}')"
+            if start_date and end_date
+            else "timestamp >= now() - INTERVAL 30 DAY"
+        )
+        
+        if start_date and end_date:
+            logger.info("Fetching percent non convertible calls for date range: %s to %s", start_date, end_date)
+        else:
+            logger.info("Fetching percent non convertible calls for last 30 days (no date range provided)")
+        query = percent_non_convertible_calls_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
+        
+        client = get_clickhouse_client()
+        rows = _json_each_row( client, query, settings={ "max_execution_time": 60,
+            "max_memory_usage": 2_000_000_000,
+            "max_threads": 4,
+        },
+    )
+        logger.info("Percent non convertible calls query result: %d rows", len(rows))
+        if not rows:
+            logger.info("No percent non convertible calls found")
+            return None
+        r = rows[0]
+        return PercentNonConvertibleCallsStats(
+            non_convertible_calls_count=int(r.get("non_convertible_calls_count", 0)),
+            total_calls_count=int(r.get("total_calls", 0)),
+            non_convertible_calls_percentage=float(r.get("non_convertible_calls_percentage", 0.0)),
+        )
+    except Exception as e:
+        logger.exception("Error fetching percent non convertible calls: %s", e)
+        return None

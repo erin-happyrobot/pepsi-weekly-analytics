@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from db import fetch_calls_ending_in_each_call_stage_stats, fetch_carrier_asked_transfer_over_total_transfer_attempts_stats, fetch_carrier_asked_transfer_over_total_call_attempts_stats,fetch_load_not_found_stats, fetch_load_status_stats, fetch_successfully_transferred_for_booking_stats, fetch_call_classifcation_stats, fetch_carrier_qualification_stats, fetch_pricing_stats, fetch_carrier_end_state_stats
+from db import fetch_calls_ending_in_each_call_stage_stats, fetch_carrier_asked_transfer_over_total_transfer_attempts_stats, fetch_carrier_asked_transfer_over_total_call_attempts_stats,fetch_load_not_found_stats, fetch_load_status_stats, fetch_successfully_transferred_for_booking_stats, fetch_call_classifcation_stats, fetch_carrier_qualification_stats, fetch_pricing_stats, fetch_carrier_end_state_stats, fetch_percent_non_convertible_calls
 from typing import Optional
 import os
 from pathlib import Path
@@ -213,6 +213,22 @@ async def get_carrier_end_state_stats(start_date: Optional[str] = None, end_date
         logger.exception("Error in get_carrier_end_state_stats endpoint")
         raise HTTPException(status_code=500, detail=f"Error fetching carrier end state stats: {str(e)}")
 
+@app.get("/percent-non-convertible-calls-stats")
+async def get_percent_non_convertible_calls_stats(start_date: Optional[str] = None, end_date: Optional[str] = None):
+    """Get percent non convertible calls stats"""
+    try:
+        result = fetch_percent_non_convertible_calls(start_date, end_date)
+        return {
+            "non_convertible_calls_count": result.non_convertible_calls_count,
+            "total_calls_count": result.total_calls_count,
+            "non_convertible_calls_percentage": result.non_convertible_calls_percentage
+        }
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.exception("Error in get_percent_non_convertible_calls_stats endpoint")
+        raise HTTPException(status_code=500, detail=f"Error fetching percent non convertible calls stats: {str(e)}")
+
 @app.get("/all-stats")
 async def get_all_stats(start_date: Optional[str] = None, end_date: Optional[str] = None):
     """Get all stats aggregated with labels"""
@@ -355,6 +371,22 @@ async def get_all_stats(start_date: Optional[str] = None, end_date: Optional[str
         errors["carrier_end_state"] = str(e)
         stats["carrier_end_state"] = None
     
+    # Percent non convertible calls stats
+    try:
+        percent_non_convertible_calls_result = fetch_percent_non_convertible_calls(start_date, end_date)
+        if percent_non_convertible_calls_result:
+            stats["percent_non_convertible_calls"] = {
+                "non_convertible_calls_count": percent_non_convertible_calls_result.non_convertible_calls_count,
+                "total_calls_count": percent_non_convertible_calls_result.total_calls_count,
+                "non_convertible_calls_percentage": percent_non_convertible_calls_result.non_convertible_calls_percentage
+            }
+        else:
+            stats["percent_non_convertible_calls"] = None
+    except Exception as e:
+        logger.exception("Error fetching percent non convertible calls stats")
+        errors["percent_non_convertible_calls"] = str(e)
+        stats["percent_non_convertible_calls"] = None
+    
     response = {
         "stats": stats,
         "date_range": {
@@ -362,8 +394,6 @@ async def get_all_stats(start_date: Optional[str] = None, end_date: Optional[str
             "end_date": end_date
         }
     }
-
-    
     
     if errors:
         response["errors"] = errors

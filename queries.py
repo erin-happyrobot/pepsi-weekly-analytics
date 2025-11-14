@@ -539,3 +539,52 @@ def carrier_end_state_query(date_filter: str, org_id: str, PEPSI_BROKER_NODE_ID:
         CROSS JOIN total_calls tc
         ORDER BY ces.count DESC
     """
+
+
+def percent_non_convertible_calls_query(date_filter: str, org_id: str, PEPSI_BROKER_NODE_ID: str) -> str:
+    # percentage of non convertible calls
+    return f"""
+        WITH recent_runs AS (
+            SELECT id AS run_id
+            FROM public_runs
+            WHERE {date_filter}
+        ),
+        sessions AS (
+            SELECT run_id, user_number FROM public_sessions
+            WHERE {date_filter}
+            AND org_id = '{org_id}'
+            AND isNotNull(user_number)
+            AND user_number != ''
+            AND user_number != '+19259898099'
+        ),
+        non_convertible_calls_stats AS (
+            SELECT *
+            FROM public_node_outputs no
+            INNER JOIN recent_runs rr ON no.run_id = rr.run_id
+            INNER JOIN public_nodes n ON no.node_id = n.id
+            INNER JOIN sessions s ON no.run_id = s.run_id
+            WHERE n.org_id = '{org_id}'
+            AND no.node_persistent_id = '{PEPSI_BROKER_NODE_ID}'
+            AND JSONHas(no.flat_data, 'result.call.call_classification') = 1
+            AND JSONExtractString(no.flat_data, 'result.call.call_classification') != ''
+            AND JSONExtractString(no.flat_data, 'result.call.call_classification') != 'null'
+            AND (JSONExtractString(no.flat_data, 'result.load.load_status') = 'COVERED'
+            OR JSONExtractString(no.flat_data, 'result.load.load_status') = 'PAST_DUE'
+            OR JSONExtractString(no.flat_data, 'result.carrier.carrier_end_state') = 'CARRIER_OFFER_TOO_HIGH'
+            OR JSONExtractString(no.flat_data, 'result.carrier.carrier_end_state') = 'CARRIER_UNABLE_TO_MEET_PICKUP_DELIVERY_APPT'
+            OR JSONExtractString(no.flat_data, 'result.carrier.carrier_end_state') = 'CARRIER_UNABLE_TO_MEET_EQUIPMENT_REQ'
+            OR JSONExtractString(no.flat_data, 'result.carrier.carrier_end_state') = 'CARRIER_DID_NOT_WANT_LOAD'
+            OR JSONExtractString(no.flat_data, 'result.call.call_classification') = 'rate_too_high'
+            )
+            AND s.user_number != '+19259898099'
+        ),
+        non_convertible_calls_count AS (
+            SELECT SUM(1) AS non_convertible_calls_count FROM non_convertible_calls_stats
+        ),
+        total_calls AS (
+            SELECT SUM(1) AS total_calls FROM sessions
+        )
+        SELECT non_convertible_calls_count, total_calls, ROUND((non_convertible_calls_count * 100.0) / total_calls, 2) AS non_convertible_calls_percentage
+        FROM non_convertible_calls_count, total_calls
+        """
+
