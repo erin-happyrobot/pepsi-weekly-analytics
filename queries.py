@@ -600,6 +600,9 @@ def number_of_unique_loads_query(date_filter: str, org_id: str, PEPSI_BROKER_NOD
             SELECT run_id, user_number FROM public_sessions
             WHERE {date_filter}
             AND org_id = '{org_id}'
+            AND isNotNull(user_number)
+            AND user_number != ''
+            AND user_number != '+19259898099'
         ),
         number_of_unique_loads_stats AS (
             SELECT SUM(1) AS number_of_unique_loads FROM (
