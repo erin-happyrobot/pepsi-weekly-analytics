@@ -1002,7 +1002,7 @@ def fetch_number_of_unique_loads(start_date: Optional[str] = None, end_date: Opt
             logger.info("Fetching number of unique loads for date range: %s to %s", start_date, end_date)
         else:
             logger.info("Fetching number of unique loads for last 30 days (no date range provided)")
-        query = number_of_unique_loads_query(date_filter, org_id, PEPSI_FBR_NODE_ID)
+        query = number_of_unique_loads_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
         
         client = get_clickhouse_client()
         rows = _json_each_row( client, query, settings=CLICKHOUSE_QUERY_SETTINGS,
@@ -1038,7 +1038,7 @@ def fetch_list_of_unique_loads(start_date: Optional[str] = None, end_date: Optio
             logger.info("Fetching list of unique loads for date range: %s to %s", start_date, end_date)
         else:
             logger.info("Fetching list of unique loads for last 30 days (no date range provided)")
-        query = list_of_unique_loads_query(date_filter, org_id, PEPSI_FBR_NODE_ID)
+        query = list_of_unique_loads_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
         
         client = get_clickhouse_client()
         rows = _json_each_row( client, query, settings=CLICKHOUSE_QUERY_SETTINGS,
