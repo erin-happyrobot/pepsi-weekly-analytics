@@ -254,7 +254,6 @@ class NumberOfUniqueLoadsStats:
     calls_per_unique_load: float
 
 @dataclass
-@dataclass
 class ListOfUniqueLoadsStats:
     list_of_unique_loads: List[str]
 
