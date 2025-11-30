@@ -254,6 +254,7 @@ class NumberOfUniqueLoadsStats:
     calls_per_unique_load: float
 
 @dataclass
+@dataclass
 class ListOfUniqueLoadsStats:
     list_of_unique_loads: List[str]
 
@@ -1021,7 +1022,7 @@ def fetch_number_of_unique_loads(start_date: Optional[str] = None, end_date: Opt
         logger.exception("Error fetching number of unique loads: %s", e)
         return None
 
-def fetch_list_of_unique_loads(start_date: Optional[str] = None, end_date: Optional[str] = None) -> Optional[List[str]]:
+def fetch_list_of_unique_loads(start_date: Optional[str] = None, end_date: Optional[str] = None) -> Optional[ListOfUniqueLoadsStats]:
     org_id = get_org_id()
     if not org_id:
         logger.error("❌ ORG_ID not found in environment variables. Please check your .env and restart the app.")
@@ -1046,10 +1047,10 @@ def fetch_list_of_unique_loads(start_date: Optional[str] = None, end_date: Optio
         rows = [str(r.get("custom_load_id")) for r in rows]
         if not rows:
             logger.info("No list of unique loads found")
-            return []
+            return ListOfUniqueLoadsStats(list_of_unique_loads=[])
         return ListOfUniqueLoadsStats(
             list_of_unique_loads=rows
         )
     except Exception as e:
         logger.exception("Error fetching list of unique loads: %s", e)
-        return []
+        return None

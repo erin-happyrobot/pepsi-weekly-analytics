@@ -614,9 +614,9 @@ def number_of_unique_loads_query(date_filter: str, org_id: str, PEPSI_BROKER_NOD
             INNER JOIN sessions s ON no.run_id = s.run_id
             WHERE n.org_id = '{org_id}'
             AND no.node_persistent_id = '{PEPSI_BROKER_NODE_ID}'
-            AND JSONHas(no.flat_data, 'load.custom_load_id') = 1
-            AND JSONExtractString(no.flat_data, 'load.custom_load_id') != ''
-            AND JSONExtractString(no.flat_data, 'load.custom_load_id') != 'null'
+            AND JSONHas(no.flat_data, 'result.load.reference_number') = 1
+            AND JSONExtractString(no.flat_data, 'result.load.reference_number') != ''
+            AND JSONExtractString(no.flat_data, 'result.load.reference_number') != 'null'
             AND s.user_number != '+19259898099'
         ),
         total_calls AS (
@@ -654,9 +654,9 @@ def list_of_unique_loads_query(date_filter: str, org_id: str, PEPSI_BROKER_NODE_
             INNER JOIN sessions s ON no.run_id = s.run_id
             WHERE n.org_id = '{org_id}'
             AND no.node_persistent_id = '{PEPSI_BROKER_NODE_ID}'
-            AND JSONHas(no.flat_data, 'load.custom_load_id') = 1
-            AND JSONExtractString(no.flat_data, 'load.custom_load_id') != ''
-            AND JSONExtractString(no.flat_data, 'load.custom_load_id') != 'null'
+            AND JSONHas(no.flat_data, 'result.load.reference_number') = 1
+            AND JSONExtractString(no.flat_data, 'result.load.reference_number') != ''
+            AND JSONExtractString(no.flat_data, 'result.load.reference_number') != 'null'
             AND s.user_number != '+19259898099'
         )
         SELECT custom_load_id FROM list_of_unique_loads_stats

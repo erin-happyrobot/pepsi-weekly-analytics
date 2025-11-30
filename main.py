@@ -251,9 +251,14 @@ async def get_list_of_unique_loads_stats(start_date: Optional[str] = None, end_d
     """Get list of unique loads stats"""
     try:
         result = fetch_list_of_unique_loads(start_date, end_date)
-        return {
-            "list_of_unique_loads": result.list_of_unique_loads
-        }
+        if result:
+            return {
+                "list_of_unique_loads": result.list_of_unique_loads
+            }
+        else:
+            return {
+                "list_of_unique_loads": []
+            }
     except Exception as e:
         import logging
         logger = logging.getLogger(__name__)
