@@ -169,6 +169,13 @@ def format_timestamp_for_display(ts: str, tz_name: str = "UTC") -> str:
 PEPSI_BROKER_NODE_ID = "01999d78-d321-7db5-ae1f-ebfddc2bff11"
 PEPSI_FBR_NODE_ID = "0199f2f5-ec8f-73e4-898b-09a2286e240e"
 
+# ClickHouse query settings for large date ranges
+CLICKHOUSE_QUERY_SETTINGS = {
+    "max_execution_time": 180,  # Increased from 60 to 180 seconds
+    "max_memory_usage": 10_000_000_000,  # Increased from 2GB to 10GB
+    "max_threads": 16,  # Increased from 4 to 16 threads
+}
+
 # ---- Data models -------------------------------------------------------------
 
 @dataclass
@@ -398,11 +405,7 @@ def fetch_calls_ending_in_each_call_stage_stats(start_date: Optional[str] = None
         rows = _json_each_row(
             client,
             query,
-            settings={
-                "max_execution_time": 60,
-                "max_memory_usage": 2_000_000_000,
-                "max_threads": 4,
-            },
+            settings=CLICKHOUSE_QUERY_SETTINGS,
         )
 
         logger.info("Call stage stats query result: %d rows", len(rows))
@@ -576,11 +579,7 @@ def fetch_carrier_asked_transfer_over_total_transfer_attempts_stats(start_date: 
         rows = _json_each_row(
             client,
             query,
-            settings={
-                "max_execution_time": 60,
-                "max_memory_usage": 2_000_000_000,
-                "max_threads": 4,
-            },
+            settings=CLICKHOUSE_QUERY_SETTINGS,
         )
 
         
@@ -625,11 +624,7 @@ def fetch_carrier_asked_transfer_over_total_call_attempts_stats(start_date: Opti
         rows = _json_each_row(
             client,
             query,
-            settings={
-                "max_execution_time": 60,
-                "max_memory_usage": 2_000_000_000,
-                "max_threads": 4,
-            },
+            settings=CLICKHOUSE_QUERY_SETTINGS,
         )
 
         logger.info("Carrier transfer stats query result: %d rows", len(rows))
@@ -722,11 +717,7 @@ def fetch_load_not_found_stats(start_date: Optional[str] = None, end_date: Optio
         rows = _json_each_row(
             client,
             query,
-            settings={
-                "max_execution_time": 60,
-                "max_memory_usage": 2_000_000_000,
-                "max_threads": 4,
-            },
+            settings=CLICKHOUSE_QUERY_SETTINGS,
         )
         logger.info("Load not found stats query result: %d rows", len(rows))
         if not rows:
@@ -763,11 +754,7 @@ def fetch_load_status_stats(start_date: Optional[str] = None, end_date: Optional
         query = load_status_stats_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
         
         client = get_clickhouse_client()
-        rows = _json_each_row( client, query, settings={
-            "max_execution_time": 60,
-            "max_memory_usage": 2_000_000_000,
-            "max_threads": 4,
-        },
+        rows = _json_each_row( client, query, settings=CLICKHOUSE_QUERY_SETTINGS,
     )
         logger.info("Load status stats query result: %d rows", len(rows))
         if not rows:
@@ -803,11 +790,7 @@ def fetch_successfully_transferred_for_booking_stats(start_date: Optional[str] =
         query = successfully_transferred_for_booking_stats_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
         
         client = get_clickhouse_client()
-        rows = _json_each_row( client, query, settings={
-                "max_execution_time": 60,
-                "max_memory_usage": 2_000_000_000,
-                "max_threads": 4,
-            },
+        rows = _json_each_row( client, query, settings=CLICKHOUSE_QUERY_SETTINGS,
         )
         logger.info("Successfully transferred for booking stats query result: %d rows", len(rows))
         if not rows:
@@ -843,11 +826,7 @@ def fetch_call_classifcation_stats(start_date: Optional[str] = None, end_date: O
         query = call_classifcation_stats_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
         
         client = get_clickhouse_client()
-        rows = _json_each_row( client, query, settings={
-            "max_execution_time": 60,
-            "max_memory_usage": 2_000_000_000,
-            "max_threads": 4,
-        },
+        rows = _json_each_row( client, query, settings=CLICKHOUSE_QUERY_SETTINGS,
     )
         logger.info("Call classification stats query result: %d rows", len(rows))
         if not rows:
@@ -883,11 +862,7 @@ def fetch_carrier_qualification_stats(start_date: Optional[str] = None, end_date
         query = carrier_qualification_stats_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
         
         client = get_clickhouse_client()
-        rows = _json_each_row( client, query, settings={
-            "max_execution_time": 60,
-            "max_memory_usage": 2_000_000_000,
-            "max_threads": 4,
-        },
+        rows = _json_each_row( client, query, settings=CLICKHOUSE_QUERY_SETTINGS,
     )
         logger.info("Carrier qualification stats query result: %d rows", len(rows))
         if not rows:
@@ -923,11 +898,7 @@ def fetch_pricing_stats(start_date: Optional[str] = None, end_date: Optional[str
         query = pricing_stats_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
         
         client = get_clickhouse_client()
-        rows = _json_each_row( client, query, settings={
-            "max_execution_time": 60,
-            "max_memory_usage": 2_000_000_000,
-            "max_threads": 4,
-        },
+        rows = _json_each_row( client, query, settings=CLICKHOUSE_QUERY_SETTINGS,
     )
         logger.info("Pricing stats query result: %d rows", len(rows))
         if not rows:
@@ -962,11 +933,7 @@ def fetch_carrier_end_state_stats(start_date: Optional[str] = None, end_date: Op
         query = carrier_end_state_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
         
         client = get_clickhouse_client()
-        rows = _json_each_row( client, query, settings={
-            "max_execution_time": 60,
-            "max_memory_usage": 2_000_000_000,
-            "max_threads": 4,
-        },
+        rows = _json_each_row( client, query, settings=CLICKHOUSE_QUERY_SETTINGS,
     )
         logger.info("Carrier end state stats query result: %d rows", len(rows))
         if not rows:
@@ -1002,10 +969,7 @@ def fetch_percent_non_convertible_calls(start_date: Optional[str] = None, end_da
         query = percent_non_convertible_calls_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
         
         client = get_clickhouse_client()
-        rows = _json_each_row( client, query, settings={ "max_execution_time": 60,
-            "max_memory_usage": 2_000_000_000,
-            "max_threads": 4,
-        },
+        rows = _json_each_row( client, query, settings=CLICKHOUSE_QUERY_SETTINGS,
     )
         logger.info("Percent non convertible calls query result: %d rows", len(rows))
         if not rows:
@@ -1041,10 +1005,7 @@ def fetch_number_of_unique_loads(start_date: Optional[str] = None, end_date: Opt
         query = number_of_unique_loads_query(date_filter, org_id, PEPSI_FBR_NODE_ID)
         
         client = get_clickhouse_client()
-        rows = _json_each_row( client, query, settings={ "max_execution_time": 60,
-            "max_memory_usage": 2_000_000_000,
-            "max_threads": 4,
-        },
+        rows = _json_each_row( client, query, settings=CLICKHOUSE_QUERY_SETTINGS,
     )
         logger.info("Number of unique loads query result: %d rows", len(rows))
         if not rows:
@@ -1080,10 +1041,7 @@ def fetch_list_of_unique_loads(start_date: Optional[str] = None, end_date: Optio
         query = list_of_unique_loads_query(date_filter, org_id, PEPSI_FBR_NODE_ID)
         
         client = get_clickhouse_client()
-        rows = _json_each_row( client, query, settings={ "max_execution_time": 60,
-            "max_memory_usage": 2_000_000_000,
-            "max_threads": 4,
-        },
+        rows = _json_each_row( client, query, settings=CLICKHOUSE_QUERY_SETTINGS,
     )
         rows = [str(r.get("custom_load_id")) for r in rows]
         if not rows:
