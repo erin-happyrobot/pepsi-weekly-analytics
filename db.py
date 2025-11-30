@@ -15,7 +15,7 @@ import clickhouse_connect
 # from timezone_utils import get_time_filter, format_timestamp_for_display
 from datetime import datetime, timedelta, timezone
 
-from queries import carrier_asked_transfer_over_total_transfer_attempt_stats_query, carrier_asked_transfer_over_total_call_attempts_stats_query, calls_ending_in_each_call_stage_stats_query, load_not_found_stats_query, load_status_stats_query, successfully_transferred_for_booking_stats_query, call_classifcation_stats_query, carrier_qualification_stats_query, pricing_stats_query, carrier_end_state_query, percent_non_convertible_calls_query, number_of_unique_loads_query, list_of_unique_loads_query
+from queries import carrier_asked_transfer_over_total_transfer_attempt_stats_query, carrier_asked_transfer_over_total_call_attempts_stats_query, calls_ending_in_each_call_stage_stats_query, load_not_found_stats_query, load_status_stats_query, successfully_transferred_for_booking_stats_query, call_classifcation_stats_query, carrier_qualification_stats_query, pricing_stats_query, carrier_end_state_query, percent_non_convertible_calls_query, number_of_unique_loads_query, list_of_unique_loads_query, number_of_unique_loads_query_broker_node, list_of_unique_loads_query_broker_node
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -175,6 +175,11 @@ CLICKHOUSE_QUERY_SETTINGS = {
     "max_memory_usage": 10_000_000_000,  # Increased from 2GB to 10GB
     "max_threads": 16,  # Increased from 4 to 16 threads
 }
+
+# Cutoff date for switching between broker_node and FBR queries
+# Dates <= Nov 6, 2024 use broker_node queries
+# Dates >= Nov 7, 2024 use FBR queries
+UNIQUE_LOADS_CUTOFF_DATE = "2024-11-07T00:00:00"
 
 # ---- Data models -------------------------------------------------------------
 
@@ -985,6 +990,39 @@ def fetch_percent_non_convertible_calls(start_date: Optional[str] = None, end_da
         logger.exception("Error fetching percent non convertible calls: %s", e)
         return None
 
+def _split_date_range_for_unique_loads(start_date: Optional[str], end_date: Optional[str]) -> Tuple[Optional[Tuple[str, str]], Optional[Tuple[str, str]]]:
+    """
+    Split date range at Nov 7, 2024 cutoff.
+    Returns: (broker_node_range, fbr_range) where each range is (start, end) or None
+    """
+    if not start_date or not end_date:
+        return None, None
+    
+    cutoff = UNIQUE_LOADS_CUTOFF_DATE
+    
+    try:
+        start_dt = datetime.fromisoformat(start_date.replace(" ", "T"))
+        end_dt = datetime.fromisoformat(end_date.replace(" ", "T"))
+        cutoff_dt = datetime.fromisoformat(cutoff.replace(" ", "T"))
+        
+        broker_range = None
+        fbr_range = None
+        
+        # If start_date is before cutoff
+        if start_dt < cutoff_dt:
+            broker_end = min(end_dt, cutoff_dt)
+            broker_range = (start_date, broker_end.strftime('%Y-%m-%dT%H:%M:%S'))
+        
+        # If end_date is after cutoff
+        if end_dt >= cutoff_dt:
+            fbr_start = max(start_dt, cutoff_dt)
+            fbr_range = (fbr_start.strftime('%Y-%m-%dT%H:%M:%S'), end_date)
+        
+        return broker_range, fbr_range
+    except Exception as e:
+        logger.warning(f"Error parsing dates for split: {e}, using single query")
+        return None, None
+
 def fetch_number_of_unique_loads(start_date: Optional[str] = None, end_date: Optional[str] = None) -> Optional[NumberOfUniqueLoadsStats]:
     org_id = get_org_id()
     if not org_id:
@@ -992,21 +1030,80 @@ def fetch_number_of_unique_loads(start_date: Optional[str] = None, end_date: Opt
         return None
     
     try:
-        date_filter = (
-            f"timestamp >= parseDateTime64BestEffort('{start_date}') AND timestamp < parseDateTime64BestEffort('{end_date}')"
-            if start_date and end_date
-            else "timestamp >= now() - INTERVAL 30 DAY" 
-        )
+        broker_range, fbr_range = _split_date_range_for_unique_loads(start_date, end_date)
         
-        if start_date and end_date:
-            logger.info("Fetching number of unique loads for date range: %s to %s", start_date, end_date)
-        else:
+        # If no date range provided, use default
+        if not start_date or not end_date:
+            date_filter = "timestamp >= now() - INTERVAL 30 DAY"
             logger.info("Fetching number of unique loads for last 30 days (no date range provided)")
-        query = number_of_unique_loads_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
+            query = number_of_unique_loads_query(date_filter, org_id, PEPSI_FBR_NODE_ID)
+            client = get_clickhouse_client()
+            rows = _json_each_row(client, query, settings=CLICKHOUSE_QUERY_SETTINGS)
+            if not rows:
+                return None
+            r = rows[0]
+            return NumberOfUniqueLoadsStats(
+                number_of_unique_loads=int(r.get("number_of_unique_loads", 0)),
+                total_calls=int(r.get("total_calls", 0)),
+                calls_per_unique_load=float(r.get("calls_per_unique_load", 0.0)),
+            )
+        
+        # If date range spans both periods, combine results
+        if broker_range and fbr_range:
+            logger.info("Fetching number of unique loads for split date range: broker_node %s-%s, FBR %s-%s", 
+                       broker_range[0], broker_range[1], fbr_range[0], fbr_range[1])
+            
+            # Get broker_node results
+            broker_filter = f"timestamp >= parseDateTime64BestEffort('{broker_range[0]}') AND timestamp < parseDateTime64BestEffort('{broker_range[1]}')"
+            broker_query = number_of_unique_loads_query_broker_node(broker_filter, org_id, PEPSI_BROKER_NODE_ID)
+            
+            # Get FBR results
+            fbr_filter = f"timestamp >= parseDateTime64BestEffort('{fbr_range[0]}') AND timestamp < parseDateTime64BestEffort('{fbr_range[1]}')"
+            fbr_query = number_of_unique_loads_query(fbr_filter, org_id, PEPSI_FBR_NODE_ID)
+            
+            client = get_clickhouse_client()
+            
+            # Execute broker_node query
+            broker_rows = _json_each_row(client, broker_query, settings=CLICKHOUSE_QUERY_SETTINGS)
+            broker_result = broker_rows[0] if broker_rows else {"number_of_unique_loads": 0, "total_calls": 0}
+            
+            # Execute FBR query
+            fbr_rows = _json_each_row(client, fbr_query, settings=CLICKHOUSE_QUERY_SETTINGS)
+            fbr_result = fbr_rows[0] if fbr_rows else {"number_of_unique_loads": 0, "total_calls": 0}
+            
+            # Get lists to count unique combined
+            broker_list_query = list_of_unique_loads_query_broker_node(broker_filter, org_id, PEPSI_BROKER_NODE_ID)
+            fbr_list_query = list_of_unique_loads_query(fbr_filter, org_id, PEPSI_FBR_NODE_ID)
+            
+            broker_list_rows = _json_each_row(client, broker_list_query, settings=CLICKHOUSE_QUERY_SETTINGS)
+            fbr_list_rows = _json_each_row(client, fbr_list_query, settings=CLICKHOUSE_QUERY_SETTINGS)
+            
+            broker_loads = {str(r.get("custom_load_id")) for r in broker_list_rows if r.get("custom_load_id")}
+            fbr_loads = {str(r.get("custom_load_id")) for r in fbr_list_rows if r.get("custom_load_id")}
+            
+            # Combine and count unique
+            combined_unique_loads = len(broker_loads | fbr_loads)
+            combined_total_calls = int(broker_result.get("total_calls", 0)) + int(fbr_result.get("total_calls", 0))
+            combined_calls_per_load = round(combined_total_calls / combined_unique_loads, 2) if combined_unique_loads > 0 else 0.0
+            
+            return NumberOfUniqueLoadsStats(
+                number_of_unique_loads=combined_unique_loads,
+                total_calls=combined_total_calls,
+                calls_per_unique_load=combined_calls_per_load,
+            )
+        
+        # Single period - determine which query to use
+        elif broker_range:
+            logger.info("Fetching number of unique loads for broker_node date range: %s to %s", broker_range[0], broker_range[1])
+            date_filter = f"timestamp >= parseDateTime64BestEffort('{broker_range[0]}') AND timestamp < parseDateTime64BestEffort('{broker_range[1]}')"
+            query = number_of_unique_loads_query_broker_node(date_filter, org_id, PEPSI_BROKER_NODE_ID)
+        else:  # fbr_range
+            logger.info("Fetching number of unique loads for FBR date range: %s to %s", fbr_range[0], fbr_range[1])
+            date_filter = f"timestamp >= parseDateTime64BestEffort('{fbr_range[0]}') AND timestamp < parseDateTime64BestEffort('{fbr_range[1]}')"
+            query = number_of_unique_loads_query(date_filter, org_id, PEPSI_FBR_NODE_ID)
         
         client = get_clickhouse_client()
-        rows = _json_each_row( client, query, settings=CLICKHOUSE_QUERY_SETTINGS,
-    )
+        rows = _json_each_row(client, query, settings=CLICKHOUSE_QUERY_SETTINGS)
         logger.info("Number of unique loads query result: %d rows", len(rows))
         if not rows:
             logger.info("No number of unique loads found")
@@ -1028,22 +1125,54 @@ def fetch_list_of_unique_loads(start_date: Optional[str] = None, end_date: Optio
         return None
     
     try:
-        date_filter = (
-            f"timestamp >= parseDateTime64BestEffort('{start_date}') AND timestamp < parseDateTime64BestEffort('{end_date}')"
-            if start_date and end_date
-            else "timestamp >= now() - INTERVAL 30 DAY" 
-        )
+        broker_range, fbr_range = _split_date_range_for_unique_loads(start_date, end_date)
         
-        if start_date and end_date:
-            logger.info("Fetching list of unique loads for date range: %s to %s", start_date, end_date)
-        else:
+        # If no date range provided, use default
+        if not start_date or not end_date:
+            date_filter = "timestamp >= now() - INTERVAL 30 DAY"
             logger.info("Fetching list of unique loads for last 30 days (no date range provided)")
-        query = list_of_unique_loads_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
+            query = list_of_unique_loads_query(date_filter, org_id, PEPSI_FBR_NODE_ID)
+            client = get_clickhouse_client()
+            rows = _json_each_row(client, query, settings=CLICKHOUSE_QUERY_SETTINGS)
+            rows = [str(r.get("custom_load_id")) for r in rows if r.get("custom_load_id")]
+            return ListOfUniqueLoadsStats(list_of_unique_loads=rows)
         
+        all_loads = set()
         client = get_clickhouse_client()
-        rows = _json_each_row( client, query, settings=CLICKHOUSE_QUERY_SETTINGS,
-    )
-        rows = [str(r.get("custom_load_id")) for r in rows]
+        
+        # If date range spans both periods, combine results
+        if broker_range and fbr_range:
+            logger.info("Fetching list of unique loads for split date range: broker_node %s-%s, FBR %s-%s", 
+                       broker_range[0], broker_range[1], fbr_range[0], fbr_range[1])
+            
+            # Get broker_node results
+            broker_filter = f"timestamp >= parseDateTime64BestEffort('{broker_range[0]}') AND timestamp < parseDateTime64BestEffort('{broker_range[1]}')"
+            broker_query = list_of_unique_loads_query_broker_node(broker_filter, org_id, PEPSI_BROKER_NODE_ID)
+            broker_rows = _json_each_row(client, broker_query, settings=CLICKHOUSE_QUERY_SETTINGS)
+            broker_loads = {str(r.get("custom_load_id")) for r in broker_rows if r.get("custom_load_id")}
+            all_loads.update(broker_loads)
+            
+            # Get FBR results
+            fbr_filter = f"timestamp >= parseDateTime64BestEffort('{fbr_range[0]}') AND timestamp < parseDateTime64BestEffort('{fbr_range[1]}')"
+            fbr_query = list_of_unique_loads_query(fbr_filter, org_id, PEPSI_FBR_NODE_ID)
+            fbr_rows = _json_each_row(client, fbr_query, settings=CLICKHOUSE_QUERY_SETTINGS)
+            fbr_loads = {str(r.get("custom_load_id")) for r in fbr_rows if r.get("custom_load_id")}
+            all_loads.update(fbr_loads)
+            
+            return ListOfUniqueLoadsStats(list_of_unique_loads=sorted(list(all_loads)))
+        
+        # Single period - determine which query to use
+        elif broker_range:
+            logger.info("Fetching list of unique loads for broker_node date range: %s to %s", broker_range[0], broker_range[1])
+            date_filter = f"timestamp >= parseDateTime64BestEffort('{broker_range[0]}') AND timestamp < parseDateTime64BestEffort('{broker_range[1]}')"
+            query = list_of_unique_loads_query_broker_node(date_filter, org_id, PEPSI_BROKER_NODE_ID)
+        else:  # fbr_range
+            logger.info("Fetching list of unique loads for FBR date range: %s to %s", fbr_range[0], fbr_range[1])
+            date_filter = f"timestamp >= parseDateTime64BestEffort('{fbr_range[0]}') AND timestamp < parseDateTime64BestEffort('{fbr_range[1]}')"
+            query = list_of_unique_loads_query(date_filter, org_id, PEPSI_FBR_NODE_ID)
+        
+        rows = _json_each_row(client, query, settings=CLICKHOUSE_QUERY_SETTINGS)
+        rows = [str(r.get("custom_load_id")) for r in rows if r.get("custom_load_id")]
         if not rows:
             logger.info("No list of unique loads found")
             return ListOfUniqueLoadsStats(list_of_unique_loads=[])
