@@ -566,9 +566,6 @@ def percent_non_convertible_calls_query(date_filter: str, org_id: str, PEPSI_BRO
             INNER JOIN sessions s ON no.run_id = s.run_id
             WHERE n.org_id = '{org_id}'
             AND no.node_persistent_id = '{PEPSI_BROKER_NODE_ID}'
-            AND JSONHas(no.flat_data, 'result.call.call_classification') = 1
-            AND JSONExtractString(no.flat_data, 'result.call.call_classification') != ''
-            AND JSONExtractString(no.flat_data, 'result.call.call_classification') != 'null'
             AND (JSONExtractString(no.flat_data, 'result.load.load_status') = 'COVERED'
             OR JSONExtractString(no.flat_data, 'result.load.load_status') = 'PAST_DUE'
             OR JSONExtractString(no.flat_data, 'result.carrier.carrier_end_state') = 'CARRIER_OFFER_TOO_HIGH'
