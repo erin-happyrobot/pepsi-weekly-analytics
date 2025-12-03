@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from db import fetch_calls_ending_in_each_call_stage_stats, fetch_carrier_asked_transfer_over_total_transfer_attempts_stats, fetch_carrier_asked_transfer_over_total_call_attempts_stats,fetch_load_not_found_stats, fetch_load_status_stats, fetch_successfully_transferred_for_booking_stats, fetch_call_classifcation_stats, fetch_carrier_qualification_stats, fetch_pricing_stats, fetch_carrier_end_state_stats, fetch_percent_non_convertible_calls, fetch_number_of_unique_loads, fetch_list_of_unique_loads
+from db import fetch_calls_ending_in_each_call_stage_stats, fetch_carrier_asked_transfer_over_total_transfer_attempts_stats, fetch_carrier_asked_transfer_over_total_call_attempts_stats,fetch_load_not_found_stats, fetch_load_status_stats, fetch_successfully_transferred_for_booking_stats, fetch_call_classifcation_stats, fetch_carrier_qualification_stats, fetch_pricing_stats, fetch_carrier_end_state_stats, fetch_percent_non_convertible_calls, fetch_number_of_unique_loads, fetch_list_of_unique_loads, fetch_calls_without_carrier_asked_for_transfer, fetch_total_calls_and_total_duration, fetch_duration_carrier_asked_for_transfer
 from typing import Optional
 import os
 from pathlib import Path
@@ -452,3 +452,71 @@ async def get_all_stats(start_date: Optional[str] = None, end_date: Optional[str
         response["errors"] = errors
     
     return response
+
+@app.get("/calls-without-carrier-asked-for-transfer-stats")
+async def get_calls_without_carrier_asked_for_transfer_stats(start_date: Optional[str] = None, end_date: Optional[str] = None):
+    """Get calls without carrier asked for transfer stats"""
+    try:
+        result = fetch_calls_without_carrier_asked_for_transfer(start_date, end_date)
+        return {
+            "total_duration_no_carrier_asked_for_transfer": result.total_duration_no_carrier_asked_for_transfer / 3600,
+            "total_calls_no_carrier_asked_for_transfer": result.total_calls_no_carrier_asked_for_transfer,
+
+            "non_convertible_calls_count": result.non_convertible_calls_count,
+            "non_convertible_calls_duration": result.non_convertible_calls_duration / 3600,
+            "rate_too_high_calls_count": result.rate_too_high_calls_count,
+            "rate_too_high_calls_duration": result.rate_too_high_calls_duration / 3600,
+            "success_calls_count": result.success_calls_count,
+            "success_calls_duration": result.success_calls_duration / 3600,
+            "other_calls_count": result.other_calls_count,
+            "other_calls_duration": result.other_calls_duration / 3600,
+    
+
+            "non_convertible_calls_percentage": result.non_convertible_calls_count / result.total_calls_no_carrier_asked_for_transfer,
+            "rate_too_high_calls_percentage": result.rate_too_high_calls_count / result.total_calls_no_carrier_asked_for_transfer,
+            "success_calls_percentage": result.success_calls_count / result.total_calls_no_carrier_asked_for_transfer,
+            "other_calls_percentage": result.other_calls_count / result.total_calls_no_carrier_asked_for_transfer,
+
+            "duration_non_convertible_calls_percentage": result.non_convertible_calls_duration / result.total_duration_no_carrier_asked_for_transfer,
+            "duration_rate_too_high_calls_percentage": result.rate_too_high_calls_duration / result.total_duration_no_carrier_asked_for_transfer,
+            "duration_success_calls_percentage": result.success_calls_duration / result.total_duration_no_carrier_asked_for_transfer,
+            "duration_other_calls_percentage": result.other_calls_duration / result.total_duration_no_carrier_asked_for_transfer,
+
+
+        }
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.exception("Error in get_calls_without-carrier-asked-for-transfer-stats endpoint")
+        raise HTTPException(status_code=500, detail=f"Error fetching calls without carrier asked for transfer stats: {str(e)}")
+
+
+@app.get("/total-calls-and-total-duration-stats")
+async def get_total_calls_and_total_duration_stats(start_date: Optional[str] = None, end_date: Optional[str] = None):
+    """Get total calls and total duration stats"""
+    try:
+        result = fetch_total_calls_and_total_duration(start_date, end_date)
+        return {
+            "total_duration": result.total_duration / 3600,
+            "total_calls": result.total_calls,
+            "avg_minutes_per_call": result.avg_minutes_per_call,
+        }
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.exception("Error in get_total_calls_and_total_duration_stats endpoint")
+        raise HTTPException(status_code=500, detail=f"Error fetching total calls and total duration stats: {str(e)}")
+
+@app.get("/duration-carrier-asked-for-transfer-stats")
+async def get_duration_carrier_asked_for_transfer_stats(start_date: Optional[str] = None, end_date: Optional[str] = None):
+    """Get duration carrier asked for transfer stats"""
+    try:
+        result = fetch_duration_carrier_asked_for_transfer(start_date, end_date)
+        return {
+            "duration_carrier_asked_for_transfer": result.duration_carrier_asked_for_transfer / 3600,
+        }
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.exception("Error in get_duration_carrier_asked_for_transfer_stats endpoint")
+        raise HTTPException(status_code=500, detail=f"Error fetching duration carrier asked for transfer stats: {str(e)}")

@@ -731,3 +731,203 @@ def list_of_unique_loads_query_broker_node(date_filter: str, org_id: str, PEPSI_
         )
         SELECT custom_load_id FROM list_of_unique_loads_stats
         """
+
+def calls_without_carrier_asked_for_transfer_query(
+    date_filter: str, org_id: str, PEPSI_BROKER_NODE_ID: str
+) -> str:
+    # calls without carrier asked for transfer
+    return f"""
+        WITH recent_runs AS (
+            SELECT id AS run_id
+            FROM public_runs
+            WHERE {date_filter}
+        ),
+        sessions AS (
+            SELECT run_id, user_number, duration
+            FROM public_sessions
+            WHERE {date_filter}
+              AND org_id = '{org_id}'
+              AND user_number != '+19259898099'
+        ),
+        -- Base CTE: runs that have transfer_reason set and not carrier_asked_for_transfer
+        eligible_runs AS (
+            SELECT DISTINCT no.run_id
+            FROM public_node_outputs no
+            INNER JOIN recent_runs rr ON no.run_id = rr.run_id
+            INNER JOIN public_nodes n ON no.node_id = n.id
+            INNER JOIN sessions s ON no.run_id = s.run_id
+            WHERE n.org_id = '{org_id}'
+              AND no.node_persistent_id = '{PEPSI_BROKER_NODE_ID}'
+              AND JSONHas(no.flat_data, 'result.transfer.transfer_reason') = 1
+              AND JSONExtractString(no.flat_data, 'result.transfer.transfer_reason') != ''
+              AND JSONExtractString(no.flat_data, 'result.transfer.transfer_reason') != 'null'
+              AND upper(JSONExtractString(no.flat_data, 'result.transfer.transfer_reason')) != 'CARRIER_ASKED_FOR_TRANSFER'
+              AND s.user_number != '+19259898099'
+        ),
+        -- Per-run stats for calls where transfer_reason is set and not carrier_asked_for_transfer
+        total_calls_without_carrier_asked_for_transfer_stats AS (
+            SELECT
+                s.run_id as run_id,
+                sum(s.duration) AS duration,
+                count(*) AS total_calls
+            FROM sessions s
+            INNER JOIN eligible_runs er ON s.run_id = er.run_id
+            GROUP BY s.run_id
+        ),
+        -- Overall totals across all those runs
+        total_calls_without_carrier_asked_for_transfer_overall AS (
+            SELECT
+                sum(total_calls)   AS total_calls,
+                sum(duration)      AS total_duration
+            FROM total_calls_without_carrier_asked_for_transfer_stats
+        ),
+        non_convertible_calls_stats AS (
+            SELECT
+                count(DISTINCT no.run_id) AS non_convertible_calls_count,
+                sum(DISTINCT s.duration) AS total_duration
+            FROM public_node_outputs no
+            INNER JOIN recent_runs rr ON no.run_id = rr.run_id
+            INNER JOIN public_nodes n ON no.node_id = n.id
+            INNER JOIN sessions s ON no.run_id = s.run_id
+            INNER JOIN eligible_runs er ON no.run_id = er.run_id
+            WHERE n.org_id = '{org_id}'
+              AND no.node_persistent_id = '{PEPSI_BROKER_NODE_ID}'
+              AND JSONHas(no.flat_data, 'result.call.call_classification') = 1
+              AND JSONExtractString(no.flat_data, 'result.call.call_classification') IN (
+                  'alternate_equipment',
+                  'caller_hung_up_no_explanation',
+                  'load_not_ready',
+                  'load_past_due',
+                  'covered',
+                  'carrier_not_qualified',
+                  'alternate_date_or_time',
+                  'user_declined_load',
+                  'checking_with_driver',
+                  'carrier_cannot_see_reference_number',
+                  'caller_put_on_hold_assistant_hung_up'
+              )
+        ),
+        rate_too_high_calls_stats AS (
+            SELECT
+                count(DISTINCT no.run_id) AS non_convertible_calls_count,
+                sum(DISTINCT s.duration) AS total_duration
+            FROM public_node_outputs no
+            INNER JOIN recent_runs rr ON no.run_id = rr.run_id
+            INNER JOIN public_nodes n ON no.node_id = n.id
+            INNER JOIN sessions s ON no.run_id = s.run_id
+            INNER JOIN eligible_runs er ON no.run_id = er.run_id
+            WHERE n.org_id = '{org_id}'
+              AND no.node_persistent_id = '{PEPSI_BROKER_NODE_ID}'
+              AND JSONHas(no.flat_data, 'result.call.call_classification') = 1
+              AND JSONExtractString(no.flat_data, 'result.call.call_classification') = 'rate_too_high'
+        ),
+        success_calls_stats AS (
+            SELECT
+                count(DISTINCT no.run_id) AS non_convertible_calls_count,
+                sum(DISTINCT s.duration) AS total_duration
+            FROM public_node_outputs no
+            INNER JOIN recent_runs rr ON no.run_id = rr.run_id
+            INNER JOIN public_nodes n ON no.node_id = n.id
+            INNER JOIN sessions s ON no.run_id = s.run_id
+            INNER JOIN eligible_runs er ON no.run_id = er.run_id
+            WHERE n.org_id = '{org_id}'
+              AND no.node_persistent_id = '{PEPSI_BROKER_NODE_ID}'
+              AND JSONHas(no.flat_data, 'result.call.call_classification') = 1
+              AND JSONExtractString(no.flat_data, 'result.call.call_classification') IN ('success', 'after_hours')
+        ),
+        other_calls_stats AS (
+            SELECT
+                count(DISTINCT no.run_id) AS non_convertible_calls_count,
+                sum(DISTINCT s.duration) AS total_duration
+            FROM public_node_outputs no
+            INNER JOIN recent_runs rr ON no.run_id = rr.run_id
+            INNER JOIN public_nodes n ON no.node_id = n.id
+            INNER JOIN sessions s ON no.run_id = s.run_id
+            INNER JOIN eligible_runs er ON no.run_id = er.run_id
+            WHERE n.org_id = '{org_id}'
+              AND no.node_persistent_id = '{PEPSI_BROKER_NODE_ID}'
+              AND JSONHas(no.flat_data, 'result.call.call_classification') = 1
+              AND JSONExtractString(no.flat_data, 'result.call.call_classification') = 'other'
+        )
+        SELECT
+            non_convertible_calls_stats.non_convertible_calls_count AS non_convertible_calls_count,
+            non_convertible_calls_stats.total_duration            AS non_convertible_calls_duration,
+            rate_too_high_calls_stats.non_convertible_calls_count AS rate_too_high_calls_count,
+            rate_too_high_calls_stats.total_duration              AS rate_too_high_calls_duration,
+            success_calls_stats.non_convertible_calls_count       AS success_calls_count,
+            success_calls_stats.total_duration                    AS success_calls_duration,
+            other_calls_stats.non_convertible_calls_count         AS other_calls_count,
+            other_calls_stats.total_duration                      AS other_calls_duration,
+            total_overall.total_calls                             AS total_calls_no_carrier_asked_for_transfer,
+            total_overall.total_duration                          AS total_duration_no_carrier_asked_for_transfer
+        FROM
+            non_convertible_calls_stats,
+            rate_too_high_calls_stats,
+            success_calls_stats,
+            other_calls_stats,
+            total_calls_without_carrier_asked_for_transfer_overall AS total_overall
+        """
+
+def total_calls_and_total_duration_query(date_filter: str, org_id: str, PEPSI_BROKER_NODE_ID: str) -> str:
+    # total calls and total duration
+    return f"""
+        WITH recent_runs AS (
+            SELECT id AS run_id
+            FROM public_runs
+            WHERE {date_filter}
+        ),
+        sessions AS (
+            SELECT run_id, user_number, duration
+            FROM public_sessions
+            WHERE {date_filter}
+              AND org_id = '{org_id}'
+              AND user_number != '+19259898099'
+        ),
+        total_calls_and_total_duration_stats AS (
+            SELECT
+                sum(duration) AS total_duration,
+                count(*) AS total_calls
+            FROM sessions
+            INNER JOIN public_node_outputs no on sessions.run_id = no.run_id
+            WHERE no.node_persistent_id = '{PEPSI_BROKER_NODE_ID}'
+        )
+        SELECT total_duration, total_calls, (total_duration / total_calls) / 60 as avg_minutes_per_call
+        FROM total_calls_and_total_duration_stats
+        """
+
+def duration_carrier_asked_for_transfer_query(date_filter: str, org_id: str, PEPSI_BROKER_NODE_ID: str) -> str:
+    # duration of carrier asked for transfer
+    return f"""
+        WITH recent_runs AS (
+            SELECT id AS run_id
+            FROM public_runs
+            WHERE {date_filter}
+        ),
+        sessions AS (
+            SELECT run_id, user_number, duration
+            FROM public_sessions
+            WHERE {date_filter}
+              AND org_id = '{org_id}'
+              AND user_number != '+19259898099'
+        ),
+        carrier_asked_sessions AS (
+            SELECT DISTINCT s.run_id, s.duration
+            FROM sessions s
+            INNER JOIN recent_runs rr ON s.run_id = rr.run_id
+            INNER JOIN public_node_outputs no ON s.run_id = no.run_id
+            INNER JOIN public_nodes n ON no.node_id = n.id
+            WHERE n.org_id = '{org_id}'
+              AND no.node_persistent_id = '{PEPSI_BROKER_NODE_ID}'
+              AND JSONHas(no.flat_data, 'result.transfer.transfer_reason') = 1
+              AND JSONExtractString(no.flat_data, 'result.transfer.transfer_reason') != ''
+              AND JSONExtractString(no.flat_data, 'result.transfer.transfer_reason') != 'null'
+              AND upper(JSONExtractString(no.flat_data, 'result.transfer.transfer_reason')) = 'CARRIER_ASKED_FOR_TRANSFER'
+        ),
+        duration_carrier_asked_for_transfer_stats AS (
+            SELECT
+                ifNull(sum(duration), 0) AS duration_carrier_asked_for_transfer
+            FROM carrier_asked_sessions
+        )
+        SELECT duration_carrier_asked_for_transfer
+        FROM duration_carrier_asked_for_transfer_stats
+    """

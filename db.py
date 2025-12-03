@@ -15,7 +15,7 @@ import clickhouse_connect
 # from timezone_utils import get_time_filter, format_timestamp_for_display
 from datetime import datetime, timedelta, timezone
 
-from queries import carrier_asked_transfer_over_total_transfer_attempt_stats_query, carrier_asked_transfer_over_total_call_attempts_stats_query, calls_ending_in_each_call_stage_stats_query, load_not_found_stats_query, load_status_stats_query, successfully_transferred_for_booking_stats_query, call_classifcation_stats_query, carrier_qualification_stats_query, pricing_stats_query, carrier_end_state_query, percent_non_convertible_calls_query, number_of_unique_loads_query, list_of_unique_loads_query, number_of_unique_loads_query_broker_node, list_of_unique_loads_query_broker_node
+from queries import carrier_asked_transfer_over_total_transfer_attempt_stats_query, carrier_asked_transfer_over_total_call_attempts_stats_query, calls_ending_in_each_call_stage_stats_query, load_not_found_stats_query, load_status_stats_query, successfully_transferred_for_booking_stats_query, call_classifcation_stats_query, carrier_qualification_stats_query, pricing_stats_query, carrier_end_state_query, percent_non_convertible_calls_query, number_of_unique_loads_query, list_of_unique_loads_query, number_of_unique_loads_query_broker_node, list_of_unique_loads_query_broker_node, calls_without_carrier_asked_for_transfer_query, total_calls_and_total_duration_query, duration_carrier_asked_for_transfer_query
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -261,6 +261,29 @@ class NumberOfUniqueLoadsStats:
 @dataclass
 class ListOfUniqueLoadsStats:
     list_of_unique_loads: List[str]
+
+@dataclass
+class CallsWithoutCarrierAskedForTransferStats:
+    non_convertible_calls_count: int
+    non_convertible_calls_duration: int
+    rate_too_high_calls_count: int
+    rate_too_high_calls_duration: int
+    success_calls_count: int
+    success_calls_duration: int
+    other_calls_count: int
+    other_calls_duration: int
+    total_duration_no_carrier_asked_for_transfer: int
+    total_calls_no_carrier_asked_for_transfer: int
+
+@dataclass
+class TotalCallsAndTotalDurationStats:
+    total_duration: int
+    total_calls: int
+    avg_minutes_per_call: float
+
+@dataclass
+class DurationCarrierAskedForTransferStats:
+    duration_carrier_asked_for_transfer: int
 
 @dataclass
 class PepsiRecord:
@@ -1197,4 +1220,101 @@ def fetch_list_of_unique_loads(start_date: Optional[str] = None, end_date: Optio
         )
     except Exception as e:
         logger.exception("Error fetching list of unique loads: %s", e)
+        return None
+
+def fetch_calls_without_carrier_asked_for_transfer(start_date: Optional[str] = None, end_date: Optional[str] = None) -> Optional[CallsWithoutCarrierAskedForTransferStats]:
+    org_id = get_org_id()
+    if not org_id:
+        logger.error("❌ ORG_ID not found in environment variables. Please check your .env and restart the app.")
+        return None
+    
+    try:
+        date_filter = (
+            f"timestamp >= parseDateTime64BestEffort('{start_date}') AND timestamp < parseDateTime64BestEffort('{end_date}')"
+            if start_date and end_date
+            else "timestamp >= now() - INTERVAL 30 DAY"
+        )
+
+        if start_date and end_date:
+            logger.info("Fetching calls without carrier asked for transfer for date range: %s to %s", start_date, end_date)
+        else:
+            logger.info("Fetching calls without carrier asked for transfer for last 30 days (no date range provided)")
+        query = calls_without_carrier_asked_for_transfer_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
+        client = get_clickhouse_client()
+        rows = _json_each_row(client, query, settings=CLICKHOUSE_QUERY_SETTINGS)
+        logger.info("Calls without carrier asked for transfer query result: %d rows", len(rows))
+        if not rows:
+            logger.info("No calls without carrier asked for transfer found")
+            return None
+        r = rows[0]
+        return CallsWithoutCarrierAskedForTransferStats(
+            non_convertible_calls_count=int(r.get("non_convertible_calls_count", 0)),
+            non_convertible_calls_duration=int(r.get("non_convertible_calls_duration", 0)),
+            rate_too_high_calls_count=int(r.get("rate_too_high_calls_count", 0)),
+            rate_too_high_calls_duration=int(r.get("rate_too_high_calls_duration", 0)),
+            success_calls_count=int(r.get("success_calls_count", 0)),
+            success_calls_duration=int(r.get("success_calls_duration", 0)),
+            other_calls_count=int(r.get("other_calls_count", 0)),
+            other_calls_duration=int(r.get("other_calls_duration", 0)),
+            total_duration_no_carrier_asked_for_transfer=int(r.get("total_duration_no_carrier_asked_for_transfer", 0)),
+            total_calls_no_carrier_asked_for_transfer=int(r.get("total_calls_no_carrier_asked_for_transfer", 0)),
+        )
+    except Exception as e:
+        logger.exception("Error fetching calls without carrier asked for transfer: %s", e)
+        return None
+
+def fetch_total_calls_and_total_duration(start_date: Optional[str] = None, end_date: Optional[str] = None) -> Optional[TotalCallsAndTotalDurationStats]:
+    org_id = get_org_id()
+    if not org_id:
+        logger.error("❌ ORG_ID not found in environment variables. Please check your .env and restart the app.")
+        return None
+    
+    try:
+        date_filter = (
+            f"timestamp >= parseDateTime64BestEffort('{start_date}') AND timestamp < parseDateTime64BestEffort('{end_date}')"
+            if start_date and end_date
+            else "timestamp >= now() - INTERVAL 30 DAY"
+        )
+        query = total_calls_and_total_duration_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
+        client = get_clickhouse_client()
+        rows = _json_each_row(client, query, settings=CLICKHOUSE_QUERY_SETTINGS)
+        logger.info("Total calls and total duration query result: %d rows", len(rows))
+        if not rows:
+            logger.info("No total calls and total duration found")
+            return None
+        r = rows[0]
+        return TotalCallsAndTotalDurationStats(
+            total_duration=int(r.get("total_duration", 0)),
+            total_calls=int(r.get("total_calls", 0)),
+            avg_minutes_per_call=float(r.get("avg_minutes_per_call", 0.0)),
+        )
+    except Exception as e:
+        logger.exception("Error fetching total calls and total duration: %s", e)
+        return None
+
+def fetch_duration_carrier_asked_for_transfer(start_date: Optional[str] = None, end_date: Optional[str] = None) -> Optional[DurationCarrierAskedForTransferStats]:
+    org_id = get_org_id()
+    if not org_id:
+        logger.error("❌ ORG_ID not found in environment variables. Please check your .env and restart the app.")
+        return None
+    
+    try:
+        date_filter = (
+            f"timestamp >= parseDateTime64BestEffort('{start_date}') AND timestamp < parseDateTime64BestEffort('{end_date}')"
+            if start_date and end_date
+            else "timestamp >= now() - INTERVAL 30 DAY"
+        )
+        query = duration_carrier_asked_for_transfer_query(date_filter, org_id, PEPSI_BROKER_NODE_ID)
+        client = get_clickhouse_client()
+        rows = _json_each_row(client, query, settings=CLICKHOUSE_QUERY_SETTINGS)
+        logger.info("Duration carrier asked for transfer query result: %d rows", len(rows))
+        if not rows:
+            logger.info("No duration carrier asked for transfer found")
+            return None
+        r = rows[0]
+        return DurationCarrierAskedForTransferStats(
+            duration_carrier_asked_for_transfer=int(r.get("duration_carrier_asked_for_transfer", 0)),
+        )
+    except Exception as e:
+        logger.exception("Error fetching duration carrier asked for transfer: %s", e)
         return None
