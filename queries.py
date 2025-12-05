@@ -215,10 +215,11 @@ def load_status_stats_query(date_filter: str, org_id: str, PEPSI_BROKER_NODE_ID:
         WHERE {date_filter}
     ),
     sessions AS (
-        SELECT run_id, user_number
-        FROM public_sessions
-        WHERE {date_filter}
-          AND org_id = '{org_id}'
+        SELECT DISTINCT s.run_id, s.user_number
+        FROM public_sessions s
+        INNER JOIN recent_runs rr ON s.run_id = rr.run_id
+        WHERE s.org_id = '{org_id}'
+          AND s.user_number != '+19259898099'
     ),
     extracted AS (
         SELECT
@@ -249,17 +250,16 @@ def load_status_stats_query(date_filter: str, org_id: str, PEPSI_BROKER_NODE_ID:
     SELECT
         lss.load_status,
         lss.cnt AS count,
-        any(tc.total_calls) AS total_calls,
+        tc.total_calls AS total_calls,
         ifNull(
             round(
-                (lss.cnt * 100.0) / nullIf(any(tc.total_calls), 0),
+                (lss.cnt * 100.0) / nullIf(tc.total_calls, 0),
                 2
             ),
             0
         ) AS load_status_percentage
     FROM load_status_stats lss
     CROSS JOIN total_calls tc
-    GROUP BY lss.load_status, lss.cnt;
   
     """
 
@@ -337,7 +337,7 @@ def successfully_transferred_for_booking_stats_query(date_filter: str, org_id: s
             0
         ) AS successfully_transferred_for_booking_percentage
         FROM successfully_transferred_for_booking_count stfb,
-            total_calls tc;
+            total_calls tc
     """
 
 def call_classifcation_stats_query(date_filter: str, org_id: str, PEPSI_BROKER_NODE_ID: str) -> str:
